@@ -1,0 +1,47 @@
+version: '3'
+services:
+  product-service:
+    container_name: product-service
+    build: ./services/product
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./shared:/app/shared # Mount the shared directory
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  order-service:
+    container_name: order-service
+    build: ./services/order
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./shared:/app/shared # Mount the shared directory
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  user-service:
+    container_name: user-service
+    build: ./services/user
+    ports:
+      - "3003:3003"
+    volumes:
+      - ./shared:/app/shared # Mount the shared directory
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  mongodb:
+    container_name: mongodb-service
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+
+volumes:
+  mongodb_data:
