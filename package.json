@@ -1,0 +1,24 @@
+{
+  "name": "mba-usp-final-paper",
+  "version": "1.0.0",
+  "description": "Final paper for my postgraduate MBA on Computer Engineering at USP",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VitaoCs/mba-usp-final-paper.git"
+  },
+  "author": "VitaoCs - Victor Cintra Santos",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/VitaoCs/mba-usp-final-paper/issues"
+  },
+  "homepage": "https://github.com/VitaoCs/mba-usp-final-paper#readme",
+  "devDependencies": {
+    "k6": "^0.0.0"
+  }
+}
