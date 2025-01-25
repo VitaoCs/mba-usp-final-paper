@@ -1,4 +1,6 @@
+const axios = require('axios')
 const User = require('./shared/user-model');
+const Order = require('./shared/order-model');
 
 exports.getAllUsers = async (req, res) => {
   try {
@@ -49,6 +51,16 @@ exports.deleteUser = async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    // Find all orders containing the deleted user
+    const orders = await Order.find({ 'user': req.params.id });
+    for (const order of orders) {
+      const response = await axios.delete(`http://order-service:3002/orders/${order._id}`);
+      if (response.status !== 200) {
+        throw new Error(`Error deleting order ${order._id}:`, response.data)
+      }
+    }
+
     res.json({ message: 'User deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });

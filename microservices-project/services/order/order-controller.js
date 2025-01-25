@@ -1,4 +1,5 @@
-const Order = require('./order-model');
+const Order = require('./shared/order-model');
+const Product = require('./shared/product-model')
 
 exports.getAllOrders = async (req, res) => {
   try {
@@ -25,7 +26,24 @@ exports.getOrderById = async (req, res) => {
 
 exports.createOrder = async (req, res) => {
   try {
-    const order = new Order(req.body);
+    const { products } = req.body
+    const productPrices = await Promise.all(
+      products.map(async (productElement) => {
+        const product = await Product.findById(productElement.product);
+        if (!product) {
+          return res.status(404).json({ error: 'Product not found' });
+        }
+        return product.price * productElement.quantity;
+      })
+    );
+
+    const totalPrice = productPrices.reduce((acc, curr) => acc + curr, 0);
+    const orderObj = {
+      totalPrice,
+      status: 'CREATED',
+      ...req.body
+    }
+    const order = new Order(orderObj);
     await order.save();
     res.status(201).json(order);
   } catch (err) {

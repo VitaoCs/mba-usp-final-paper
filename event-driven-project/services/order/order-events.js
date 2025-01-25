@@ -1,5 +1,5 @@
 const kafka = require('kafka-node');
-const Order = require('./order-model'); // Import your Order model
+const Order = require('./order-model');
 
 const Consumer = kafka.Consumer;
 const client = new kafka.KafkaClient({ kafkaHost: 'kafka:9092' });
