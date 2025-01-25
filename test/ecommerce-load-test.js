@@ -1,99 +1,158 @@
 import http from 'k6/http';
 import { sleep, check } from 'k6';
 
+// Load test configuration
 export const options = {
-  vus: 10, 
-  duration: '30s',
-  setupTimeout: '1m', // Allow more time for setup
+  vus: __ENV.VUS || 50,
+  duration: __ENV.DURATION || '1m',
 };
 
-const BASE_URL_PRODUCT = 'http://localhost:3001'
-const BASE_URL_USER = 'http://localhost:3003'
-const BASE_URL_ORDER = 'http://localhost:3002'
+// Base URLs
+const BASE_URL_PRODUCT = 'http://localhost:3001';
+const BASE_URL_USER = 'http://localhost:3003';
+const BASE_URL_ORDER = 'http://localhost:3002';
 
-// Sample product and user data
-const sampleProducts = [
-  { name: 'Product 1', price: 25.99, description: 'Description for product 1' },
-  { name: 'Product 2', price: 19.50, description: 'Description for product 2' },
-];
+// Generate sample data
+const generateSampleProducts = (count) =>
+  Array.from({ length: count }, (_, i) => ({
+    name: `Product ${String.fromCharCode(65 + (i % 26))}${Math.floor(i / 26) + 1}`,
+    price: parseFloat((Math.random() * 100).toFixed(2)),
+    description: `Description for product ${String.fromCharCode(65 + (i % 26))}${Math.floor(i / 26) + 1}`,
+  }));
 
-const sampleUsers = [
-  { name: 'User 1', email: 'user1@example.com', address: 'Address 1' },
-  { name: 'User 2', email: 'user2@example.com', address: 'Address 2' },
-];
+const generateSampleUsers = (count) =>
+  Array.from({ length: count }, (_, i) => ({
+    name: `User ${String.fromCharCode(65 + (i % 26))}${Math.floor(i / 26) + 1}`,
+    email: `user${i + 1}@example.com`,
+    address: `Address ${String.fromCharCode(65 + (i % 26))}${Math.floor(i / 26) + 1}`,
+  }));
 
-export function setup() {
-  console.log('Setting up the database...')
+const sampleProducts = generateSampleProducts(100);
+const sampleUsers = generateSampleUsers(100);
 
-  for (const product of sampleProducts) {
-    const res = http.post(`${BASE_URL_PRODUCT}/products`, JSON.stringify(product))
-    check(res, {
-      'Product created successfully': (r) => r.status === 201,
+function createResources(data, url) {
+  const ids = [];
+  for (const item of data) {
+    const res = http.post(url, JSON.stringify(item), {
+      headers: { 'Content-Type': 'application/json' },
     });
+    check(res, { [`Resource created at ${url}`]: (r) => r.status === 201 });
+    if (res.status === 201) {
+      ids.push(res.json('_id'));
+    }
   }
-
-  for (const user of sampleUsers) {
-    const res = http.post(`${BASE_URL_USER}/users`, JSON.stringify(user))
-    check(res, {
-      'User created successfully': (r) => r.status === 201,
-    });
-  }
-
-  console.log('Database setup complete!')
+  return ids;
 }
 
-export default function () {
-    // Scenario 1: Browse product listings
-    const productsResponse = http.get(`${BASE_URL_PRODUCT}/products`);
-    check(productsResponse, {
-      'Products fetched successfully': (r) => r.status === 200,
-    });
-  
-    // Scenario 2: View a specific product
-    const randomProductId = getRandomProductId(); // Helper function to get a random product ID from the setup
-    const productDetailsResponse = http.get(`${BASE_URL_PRODUCT}/products/${randomProductId}`);
-    check(productDetailsResponse, {
-      'Product details fetched successfully': (r) => r.status === 200,
-    });
-  
-    // Scenario 3: Create an order
-    const randomUserId = getRandomUserId(); // Helper function to get a random user ID from the setup
-    const newOrder = {
-      user: randomUserId,
-      products: [
-        { product: getRandomProductId(), quantity: Math.floor(Math.random() * 3) + 1 }, // Random quantity between 1 and 3
-        { product: getRandomProductId(), quantity: Math.floor(Math.random() * 3) + 1 }
-      ]
-    };
-    const createOrderResponse = http.post(`${BASE_URL_ORDER}/orders`, JSON.stringify(newOrder));
-    check(createOrderResponse, {
-      'Order created successfully': (r) => r.status === 201,
-    });
-  
-    // Scenario 4: Update user information
-    const updatedUser = { 
-      name: 'Updated User Name',
-    };
-    const updateResponse = http.put(`${BASE_URL_USER}/users/${randomUserId}`, JSON.stringify(updatedUser));
-    check(updateResponse, {
-      'User updated successfully': (r) => r.status === 200,
-    });
-  
-    // Additional scenarios you can consider:
-    // - Search for products
-    // - Filter products by category or price range
-    // - View order history for a user
-    // - Update order status
-    // - Delete a user or product (carefully, as it might impact other tests)
-  
-    sleep(1); 
-  }
-  
-  // Helper functions to get random IDs from the setup data
-  function getRandomProductId() {
-    // ... implement logic to get a random product ID from sampleProducts
-  }
-  
-  function getRandomUserId() {
-    // ... implement logic to get a random user ID from sampleUsers
-  }
+function fetchResource(url, description) {
+  const res = http.get(url);
+  check(res, {
+    [description]: (r) => r.status === 200,
+    'Response time < 500ms': (r) => r.timings.duration < 500,
+  });
+  return res.json();
+}
+
+function fetchDeletedResource(url, description) {
+  const res = http.get(url);
+  check(res, {
+    [description]: (r) => r.status === 404,
+    'Response time < 500ms': (r) => r.timings.duration < 500,
+  });
+  return res.json();
+}
+
+function createOrder(productIds, userId) {
+  const productCount = Math.floor(Math.random() * 3) + 2;
+  const products = Array.from({ length: productCount }, () => ({
+    product: productIds[Math.floor(Math.random() * productIds.length)],
+    quantity: Math.floor(Math.random() * 3) + 1,
+  }));
+
+  const newOrder = { user: userId, products };
+  const res = http.post(`${BASE_URL_ORDER}/orders`, JSON.stringify(newOrder), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+  check(res, { 'Order created': (r) => r.status === 201 });
+  return res.json('_id');
+}
+
+function updateProductPrice(productId, newPrice) {
+  const res = http.put(`${BASE_URL_PRODUCT}/products/${productId}`, JSON.stringify({ price: newPrice }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+  check(res, { 'Product price updated': (r) => r.status === 200 });
+}
+
+function deleteResource(url, description) {
+  const res = http.del(url);
+  check(res, { [description]: (r) => r.status === 200 });
+}
+
+function validateOrderTotal(orderId) {
+  const order = fetchResource(`${BASE_URL_ORDER}/orders/${orderId}`, 'Fetched order details');
+  const calculatedTotal = order.products && order.products.length > 0 ? order.products.reduce((total, p) => total + p.price * p.quantity, 0) : 0;
+  check(order, { 'Order total price updated': () => order.totalPrice === calculatedTotal });
+}
+
+function updateUserDetails(userId, newDetails) {
+  const res = http.put(`${BASE_URL_USER}/users/${userId}`, JSON.stringify(newDetails), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+  check(res, { 'User updated': (r) => r.status === 200 });
+}
+
+export function setup() {
+  console.log('Setting up the database...');
+  const productIds = createResources(sampleProducts, `${BASE_URL_PRODUCT}/products`);
+  const userIds = createResources(sampleUsers, `${BASE_URL_USER}/users`);
+  const orderIds = userIds.map((userId) => createOrder(productIds, userId));
+
+  return { productIds, userIds, orderIds };
+}
+
+export default function (data) {
+  const { productIds, userIds, orderIds } = data;
+
+  // Creating destructive user and product
+  const destructiveUser = createResources(
+    generateSampleUsers(1), 
+    `${BASE_URL_USER}/users`
+  )[0]
+
+  const destructiveProduct = createResources(
+    generateSampleProducts(1), 
+    `${BASE_URL_PRODUCT}/products`
+  )[0];
+
+  const destructiveOrder = createOrder([destructiveProduct, ...productIds], destructiveUser)
+
+  // Scenario 1: Update product price and validate order total
+  const randomProductId = productIds[Math.floor(Math.random() * productIds.length)];
+  updateProductPrice(randomProductId, 50.0); // Example new price
+  validateOrderTotal(orderIds[Math.floor(Math.random() * orderIds.length)]); // Validate order linked to the product
+
+  // Scenario 2: Update user details and validate order
+  const userIndex = Math.floor(Math.random() * userIds.length)
+  const randomUserId = userIds[userIndex];
+  updateUserDetails(randomUserId, { name: 'Updated User', address: 'Updated Address', email: 'updated_email@example.com' });
+
+  const order = fetchResource(`${BASE_URL_ORDER}/orders/${orderIds[userIndex]}`, 'Fetched order');
+  check(order, {
+    'Order reflects updated user name': () => order.user.name === 'Updated User',
+    'Order reflects updated user address': () => order.user.address === 'Updated Address',
+    'Order reflects updated user address': () => order.user.email === 'updated_email@example.com',
+  });
+
+  // Scenario 3: Safely delete a product and validate order update
+  deleteResource(`${BASE_URL_PRODUCT}/products/${destructiveProduct}`, 'Product deleted');
+  validateOrderTotal(destructiveOrder);
+
+  // Scenario 4: Safely delete a user and validate orders
+  const destructiveUserOderDetails = fetchResource(`${BASE_URL_ORDER}/orders/${destructiveOrder}`, 'Order fetch for destructive user').user === destructiveUser;
+  deleteResource(`${BASE_URL_USER}/users/${destructiveUser}`, 'User deleted');
+  const userOrders = fetchDeletedResource(`${BASE_URL_ORDER}/orders/${destructiveOrder}`, 'Order fetch after user deletion');
+  check(userOrders, { 'All orders for deleted user removed': () => userOrders.error === 'Order not found' });
+
+  sleep(1); // Simulate real-world think time
+}

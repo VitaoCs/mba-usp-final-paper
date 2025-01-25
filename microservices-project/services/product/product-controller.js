@@ -88,8 +88,9 @@ exports.deleteProduct = async (req, res) => {
       } else {
         // Recalculate and update order total before calling axios.put
         order.totalPrice = await order.products.reduce(async (total, p) => {
-          const { price } = await Product.findById(p.product)
-          return total + (price * p.quantity)
+          const productDetails = await Product.findById(p.product)
+          if(productDetails && productDetails.price) return total + (productDetails.price * p.quantity)
+          return total
         }, 0);
 
         const response = await axios.put(`http://order-service:3002/orders/${order._id}`, order);
