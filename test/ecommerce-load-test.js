@@ -4,7 +4,7 @@ import { sleep, check } from 'k6';
 // Load test configuration
 export const options = {
   vus: __ENV.VUS || 50,
-  duration: __ENV.DURATION || '1m',
+  duration: __ENV.DURATION || '2m',
 };
 
 // Base URLs
@@ -91,7 +91,13 @@ function deleteResource(url, description) {
 
 function validateOrderTotal(orderId) {
   const order = fetchResource(`${BASE_URL_ORDER}/orders/${orderId}`, 'Fetched order details');
-  const calculatedTotal = order.products && order.products.length > 0 ? order.products.reduce((total, p) => total + p.price * p.quantity, 0) : 0;
+  let calculatedTotal = 0
+  if(order.products && order.products.length > 0) {
+    calculatedTotal = order.products.reduce((total, p) => {
+      if(p && !p.product) return total
+      return total + p.product.price * p.quantity
+    }, 0);
+  }
   check(order, { 'Order total price updated': () => order.totalPrice === calculatedTotal });
 }
 
@@ -129,8 +135,9 @@ export default function (data) {
 
   // Scenario 1: Update product price and validate order total
   const randomProductId = productIds[Math.floor(Math.random() * productIds.length)];
-  updateProductPrice(randomProductId, 50.0); // Example new price
-  validateOrderTotal(orderIds[Math.floor(Math.random() * orderIds.length)]); // Validate order linked to the product
+  updateProductPrice(randomProductId, 50.0);
+  sleep(1); // Simulate real-world think time
+  validateOrderTotal(orderIds[Math.floor(Math.random() * orderIds.length)]);
 
   // Scenario 2: Update user details and validate order
   const userIndex = Math.floor(Math.random() * userIds.length)
@@ -146,11 +153,13 @@ export default function (data) {
 
   // Scenario 3: Safely delete a product and validate order update
   deleteResource(`${BASE_URL_PRODUCT}/products/${destructiveProduct}`, 'Product deleted');
+  sleep(1); // Simulate real-world think time
   validateOrderTotal(destructiveOrder);
 
   // Scenario 4: Safely delete a user and validate orders
-  const destructiveUserOderDetails = fetchResource(`${BASE_URL_ORDER}/orders/${destructiveOrder}`, 'Order fetch for destructive user').user === destructiveUser;
+  fetchResource(`${BASE_URL_ORDER}/orders/${destructiveOrder}`, 'Order fetch for destructive user').user === destructiveUser;
   deleteResource(`${BASE_URL_USER}/users/${destructiveUser}`, 'User deleted');
+  sleep(1); // Simulate real-world think time
   const userOrders = fetchDeletedResource(`${BASE_URL_ORDER}/orders/${destructiveOrder}`, 'Order fetch after user deletion');
   check(userOrders, { 'All orders for deleted user removed': () => userOrders.error === 'Order not found' });
 
